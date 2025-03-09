@@ -1,0 +1,31 @@
+# Python
+
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.log
+.black
+.blackd
+*.bak
+*.toml
+
+# IDE и редакторы
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+*.code-workspace
+.history/
+*.swp
+*.swo
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+.DB_Store
+
+# Кэш и временные файлы
+.cache/
+.npm/
+.eslintcache

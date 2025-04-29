@@ -9,15 +9,16 @@ import threading
 import queue
 import sys
 import os
-from people_counter import PeopleCounter
-import tkinter as tk
-
 
 # Абсолютный путь к корневой директории проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Добавляем путь к корневой директории проекта
 sys.path.append(BASE_DIR)
+
+# Импортируем PeopleCounter из корневой директории
+from people_counter import PeopleCounter
+import tkinter as tk
 
 # Глобальные переменные для хранения состояния
 frame_queue = queue.Queue(maxsize=10)

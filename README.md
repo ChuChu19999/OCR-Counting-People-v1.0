@@ -44,7 +44,6 @@
 1. Клонируйте репозиторий:
 ```bash
 git clone https://github.com/your-username/OCR-Counting-People.git
-cd OCR-Counting-People
 ```
 
 2. Создайте виртуальное окружение:

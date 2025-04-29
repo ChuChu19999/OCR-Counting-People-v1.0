@@ -130,36 +130,53 @@ class PeopleCounter:
         self.count_label.pack(padx=10)
 
     def get_line_points(self, frame_width, frame_height):
-        """Вычисляет координаты начала и конца линии подсчета на основе настроек слайдеров"""
-        # Вычисляем Y-координату линии, преобразуя значение слайдера (0-100)
-        # в реальные координаты кадра
-        line_y = int(frame_height * self.line_position.get() / 100)
-        # Получаем текущий угол поворота линии из слайдера
+        """Вычисляет координаты начала и конца линии подсчета с учетом соотношения сторон кадра
+
+        Args:
+            frame_width: ширина кадра
+            frame_height: высота кадра
+
+        Returns:
+            tuple: ((x1,y1), (x2,y2)) - координаты начала и конца линии
+        """
+        # Центр кадра
+        center_x = frame_width // 2
+        center_y = frame_height // 2
+
+        # Получаем угол и переводим в радианы
         angle = self.line_angle.get()
-
-        # Находим центральную точку линии
-        center_x = frame_width // 2  # Центр по горизонтали - половина ширины кадра
-        center_y = line_y  # Позиция по вертикали из слайдера
-
-        # Вычисляем длину линии, используя теорему Пифагора
-        # Берем длину больше диагонали кадра, чтобы линия всегда пересекала весь кадр
-        line_length = math.sqrt(frame_width**2 + frame_height**2)
-        half_length = line_length / 2  # Половина длины для расчета от центра
-
-        # Переводим угол из градусов в радианы для тригонометрических функций
         angle_rad = math.radians(angle)
 
-        # Вычисляем координаты первой точки линии (x1, y1)
-        # Используем косинус для X координаты и синус для Y координаты
+        # Вычисляем коэффициент масштабирования смещения в зависимости от угла
+        # При 0° и 180° (горизонтальная линия) используем высоту кадра
+        # При 90° и 270° (вертикальная линия) используем ширину кадра
+        # Между ними - плавный переход
+        vertical_factor = abs(math.sin(angle_rad))
+        horizontal_factor = abs(math.cos(angle_rad))
+
+        max_offset = max(frame_width, frame_height)
+
+        # Вычисляем смещение с учетом угла наклона
+        base_offset = (self.line_position.get() - 50) / 50.0  # От -1 до 1
+        offset_x = base_offset * frame_width * vertical_factor
+        offset_y = base_offset * frame_height * horizontal_factor
+
+        # Используем длину, гарантирующую пересечение кадра при любом угле
+        line_length = math.sqrt(frame_width**2 + frame_height**2) * 1.5
+        half_length = line_length / 2
+
+        # Вычисляем базовые точки линии
         x1 = center_x + half_length * math.cos(angle_rad)
         y1 = center_y + half_length * math.sin(angle_rad)
-
-        # Вычисляем координаты второй точки линии (x2, y2)
-        # Для второй точки идем в противоположном направлении от центра
         x2 = center_x - half_length * math.cos(angle_rad)
         y2 = center_y - half_length * math.sin(angle_rad)
 
-        # Возвращаем кортеж с целочисленными координатами обеих точек
+        # Применяем смещение в зависимости от угла
+        x1 += offset_x
+        x2 += offset_x
+        y1 += offset_y
+        y2 += offset_y
+
         return (int(x1), int(y1)), (int(x2), int(y2))
 
     def point_position_relative_to_line(self, point, line_start, line_end):

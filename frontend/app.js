@@ -13,6 +13,7 @@ const lineAngle = document.getElementById('lineAngle');
 // Состояние приложения
 let isRunning = false;
 let countUpdateInterval = null;
+let isStoppingInProgress = false;  // Добавляем флаг для отслеживания процесса остановки
 
 // Функция для обновления настроек линии
 async function updateLineSettings() {
@@ -95,17 +96,27 @@ async function startCounting() {
 
 // Функция для остановки системы подсчета
 async function stopCounter() {
+    // Проверяем, не выполняется ли уже остановка
+    if (isStoppingInProgress) {
+        console.log('Остановка уже в процессе...');
+        return;
+    }
+
     try {
+        isStoppingInProgress = true;
+        stopButton.disabled = true;  // Блокируем кнопку
+        stopButton.textContent = 'Останавливается...';  // Меняем текст кнопки
+
         // Отправляем запрос на остановку
         const response = await fetch(`${API_BASE_URL}/stop/`, {
             method: 'POST'
         });
         
-        if (response.ok) {
+        if (response.status === 200) {
+            console.log('Система успешно остановлена');
             isRunning = false;
             startButton.disabled = false;
             startCountingButton.disabled = true;
-            stopButton.disabled = true;
             linePosition.disabled = false;
             lineAngle.disabled = false;
 
@@ -121,9 +132,23 @@ async function stopCounter() {
             // Удаляем обработчики событий слайдеров
             linePosition.removeEventListener('input', updateLineSettings);
             lineAngle.removeEventListener('input', updateLineSettings);
+        } else if (response.status === 429) {
+            console.log('Остановка уже выполняется...');
+        } else if (response.status === 400) {
+            console.log('Система уже остановлена');
+            isRunning = false;
+            startButton.disabled = false;
+            startCountingButton.disabled = true;
+            stopButton.disabled = true;
+        } else {
+            throw new Error(`Неожиданный статус ответа: ${response.status}`);
         }
     } catch (error) {
         console.error('Ошибка при остановке системы:', error);
+    } finally {
+        isStoppingInProgress = false;
+        stopButton.disabled = !isRunning;  // Активируем кнопку только если система запущена
+        stopButton.textContent = 'Остановить';  // Возвращаем исходный текст кнопки
     }
 }
 

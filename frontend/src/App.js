@@ -1,41 +1,113 @@
 import React, { useState, useEffect, useCallback } from "react";
-import styled from "styled-components";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import {
+  Container,
+  Typography,
+  Paper,
+  Box,
+  CssBaseline,
+  Grid,
+} from "@mui/material";
 import VideoFeed from "./components/VideoFeed";
 import LineControls from "./components/LineControls";
 import Controls from "./components/Controls";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
 import * as api from "./services/api";
+import "./styles/theme.css";
 
-const Container = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-`;
-
-const Title = styled.h1`
-  text-align: center;
-  color: #333;
-  margin-bottom: 30px;
-`;
-
-const Counter = styled.div`
-  text-align: center;
-  margin: 20px 0;
-  padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-  h2 {
-    margin: 0;
-    color: #333;
-  }
-
-  span {
-    color: #007bff;
-    font-weight: bold;
-    font-size: 1.2em;
-  }
-`;
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: "#1a237e",
+    },
+    secondary: {
+      main: "#0d47a1",
+    },
+    background: {
+      default: "#f5f5f5",
+    },
+    text: {
+      primary: "#1f2937",
+      secondary: "#4b5563",
+    },
+  },
+  typography: {
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"',
+    h1: {
+      fontSize: "2.5rem",
+      fontWeight: 600,
+      letterSpacing: "-0.02em",
+      color: "#1a237e",
+    },
+    h2: {
+      fontSize: "2rem",
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+      color: "#0d47a1",
+    },
+    h5: {
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+    },
+    h6: {
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+    },
+    subtitle1: {
+      fontSize: "1rem",
+      fontWeight: 500,
+      letterSpacing: "-0.01em",
+    },
+    body1: {
+      fontSize: "1rem",
+      letterSpacing: "-0.01em",
+    },
+    button: {
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+      textTransform: "none",
+    },
+  },
+  components: {
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+          transition: "all 0.3s ease",
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: "0 6px 12px rgba(0, 0, 0, 0.15)",
+          },
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          padding: "10px 24px",
+          fontSize: "0.9375rem",
+        },
+      },
+    },
+    MuiSlider: {
+      styleOverrides: {
+        root: {
+          "& .MuiSlider-thumb": {
+            width: 20,
+            height: 20,
+          },
+          "& .MuiSlider-rail": {
+            opacity: 0.3,
+          },
+        },
+      },
+    },
+  },
+});
 
 function App() {
   const [isRunning, setIsRunning] = useState(false);
@@ -137,30 +209,124 @@ function App() {
   }, [countUpdateInterval]);
 
   return (
-    <Container>
-      <Title>Система подсчета людей</Title>
-      <VideoFeed isRunning={isRunning} onError={handleVideoError} />
-      <LineControls
-        position={linePosition}
-        angle={lineAngle}
-        onPositionChange={handlePositionChange}
-        onAngleChange={handleAngleChange}
-        disabled={isCountingStarted}
-      />
-      <Controls
-        onStart={handleStart}
-        onStartCounting={handleStartCounting}
-        onStop={handleStop}
-        isRunning={isRunning}
-        isCountingStarted={isCountingStarted}
-        isStoppingInProgress={isStoppingInProgress}
-      />
-      <Counter>
-        <h2>
-          Количество людей в помещении: <span>{peopleCount}</span>
-        </h2>
-      </Counter>
-    </Container>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <Container
+          maxWidth="lg"
+          sx={{
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <Header />
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              gap: 1,
+              minHeight: 0,
+              mt: 0.25,
+            }}
+          >
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Paper
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  p: 1,
+                }}
+              >
+                <VideoFeed
+                  isRunning={isRunning}
+                  onError={() => console.error("Ошибка загрузки видео")}
+                />
+              </Paper>
+            </Box>
+            <Box
+              sx={{
+                width: { xs: "100%", md: "300px" },
+                display: "flex",
+                flexDirection: "column",
+                gap: 1,
+              }}
+            >
+              {isCountingStarted && (
+                <Paper
+                  sx={{
+                    p: 1.5,
+                    backgroundColor: "primary.main",
+                    color: "white",
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      opacity: 0.9,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Людей в помещении
+                  </Typography>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: 600,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {peopleCount}
+                  </Typography>
+                </Paper>
+              )}
+              <Paper sx={{ p: 1.5 }}>
+                <LineControls
+                  position={linePosition}
+                  angle={lineAngle}
+                  onPositionChange={handlePositionChange}
+                  onAngleChange={handleAngleChange}
+                  disabled={!isRunning || isCountingStarted}
+                />
+              </Paper>
+              <Paper sx={{ p: 1.5 }}>
+                <Controls
+                  onStart={handleStart}
+                  onStartCounting={handleStartCounting}
+                  onStop={handleStop}
+                  isRunning={isRunning}
+                  isCountingStarted={isCountingStarted}
+                  isStoppingInProgress={isStoppingInProgress}
+                />
+              </Paper>
+            </Box>
+          </Box>
+          <Box sx={{ mt: 0.5 }}>
+            <Footer />
+          </Box>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
 

@@ -1,34 +1,6 @@
 import React from "react";
-import styled from "styled-components";
-
-const Container = styled.div`
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  margin: 20px 0;
-`;
-
-const Button = styled.button`
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  background-color: ${(props) =>
-    props.isStoppingInProgress ? "#ccc" : "#007bff"};
-  color: white;
-  font-size: 16px;
-  cursor: ${(props) =>
-    props.disabled || props.isStoppingInProgress ? "not-allowed" : "pointer"};
-  transition: background-color 0.3s ease;
-
-  &:hover:not(:disabled):not([data-stopping="true"]) {
-    background-color: #0056b3;
-  }
-
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-`;
+import { Stack, Button, CircularProgress } from "@mui/material";
+import { PlayArrow, Stop, Settings } from "@mui/icons-material";
 
 const Controls = ({
   onStart,
@@ -39,25 +11,49 @@ const Controls = ({
   isStoppingInProgress,
 }) => {
   return (
-    <Container>
-      <Button onClick={onStart} disabled={isRunning}>
+    <Stack spacing={2} direction="column">
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<Settings />}
+        onClick={onStart}
+        disabled={isRunning}
+      >
         Начать настройку
       </Button>
+
       <Button
+        variant="contained"
+        color="secondary"
+        startIcon={<PlayArrow />}
         onClick={onStartCounting}
         disabled={!isRunning || isCountingStarted}
       >
         Начать подсчет
       </Button>
+
       <Button
+        variant="contained"
+        color="error"
+        startIcon={
+          isStoppingInProgress ? (
+            <CircularProgress size={20} color="inherit" />
+          ) : (
+            <Stop />
+          )
+        }
         onClick={onStop}
-        disabled={!isRunning}
-        isStoppingInProgress={isStoppingInProgress}
-        data-stopping={isStoppingInProgress}
+        disabled={!isRunning || isStoppingInProgress}
+        sx={{
+          backgroundColor: isStoppingInProgress ? "grey.400" : undefined,
+          "&:hover": {
+            backgroundColor: isStoppingInProgress ? "grey.400" : undefined,
+          },
+        }}
       >
-        {isStoppingInProgress ? "Останавливается..." : "Остановить"}
+        Остановить
       </Button>
-    </Container>
+    </Stack>
   );
 };
 

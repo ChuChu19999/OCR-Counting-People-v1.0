@@ -1,24 +1,6 @@
 import React from "react";
-import styled from "styled-components";
-
-const Container = styled.div`
-  margin: 20px 0;
-`;
-
-const SliderContainer = styled.div`
-  margin: 15px 0;
-`;
-
-const Label = styled.label`
-  display: block;
-  margin-bottom: 5px;
-  font-weight: 500;
-`;
-
-const Slider = styled.input`
-  width: 100%;
-  height: 25px;
-`;
+import { Box, Typography, Slider } from "@mui/material";
+import { Timeline, RotateRight } from "@mui/icons-material";
 
 const LineControls = ({
   position,
@@ -28,32 +10,61 @@ const LineControls = ({
   disabled,
 }) => {
   return (
-    <Container>
-      <SliderContainer>
-        <Label htmlFor="linePosition">Положение линии:</Label>
+    <Box sx={{ width: "100%", px: 3 }}>
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <Timeline sx={{ mr: 1, color: "primary.main" }} />
+          <Typography variant="h6" color="primary">
+            Положение линии
+          </Typography>
+        </Box>
         <Slider
-          type="range"
-          id="linePosition"
-          min="0"
-          max="100"
           value={position}
-          onChange={(e) => onPositionChange(e.target.value)}
+          onChange={(_, value) => onPositionChange(value)}
           disabled={disabled}
+          min={0}
+          max={100}
+          valueLabelDisplay="auto"
+          sx={{
+            color: "primary.main",
+            "& .MuiSlider-thumb": {
+              width: 24,
+              height: 24,
+            },
+            "& .MuiSlider-rail": {
+              opacity: 0.5,
+            },
+          }}
         />
-      </SliderContainer>
-      <SliderContainer>
-        <Label htmlFor="lineAngle">Угол поворота (градусы):</Label>
+      </Box>
+
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <RotateRight sx={{ mr: 1, color: "primary.main" }} />
+          <Typography variant="h6" color="primary">
+            Угол поворота (градусы)
+          </Typography>
+        </Box>
         <Slider
-          type="range"
-          id="lineAngle"
-          min="0"
-          max="359"
           value={angle}
-          onChange={(e) => onAngleChange(e.target.value)}
+          onChange={(_, value) => onAngleChange(value)}
           disabled={disabled}
+          min={0}
+          max={359}
+          valueLabelDisplay="auto"
+          sx={{
+            color: "primary.main",
+            "& .MuiSlider-thumb": {
+              width: 24,
+              height: 24,
+            },
+            "& .MuiSlider-rail": {
+              opacity: 0.5,
+            },
+          }}
         />
-      </SliderContainer>
-    </Container>
+      </Box>
+    </Box>
   );
 };
 

@@ -236,8 +236,15 @@ class PeopleCounter:
                  где (x1,y1) - верхний левый угол, (x2,y2) - нижний правый угол
         """
         # Запускаем YOLO для обнаружения только класса 'person' (индекс 0)
-        # classes=0 говорит модели искать только людей
-        results = self.model(frame, classes=0)
+        # Уменьшаем порог NMS для лучшего разделения близко стоящих людей
+        # Увеличиваем conf для уменьшения ложных срабатываний
+        results = self.model(
+            frame,
+            classes=0,
+            conf=0.35,  # Снижаем порог уверенности для обнаружения
+            iou=0.3,    # Уменьшаем IoU для лучшего разделения близких объектов
+            max_det=10  # Увеличиваем максимальное количество детекций
+        )
 
         # Список для хранения координат обнаруженных людей
         boxes = []
@@ -246,13 +253,16 @@ class PeopleCounter:
         for result in results:
             # Перебираем все найденные объекты
             for box in result.boxes:
-                # Проверяем уверенность модели (confidence)
-                # Если модель уверена больше чем на 50%, добавляем объект
-                if box.conf > 0.5:
-                    # Получаем координаты рамки из результатов YOLO
-                    # xyxy возвращает координаты в формате [x1, y1, x2, y2]
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                # Получаем координаты рамки из результатов YOLO
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0].cpu().numpy())
 
+                # Фильтруем по размеру рамки, чтобы исключить слишком маленькие детекции
+                box_width = x2 - x1
+                box_height = y2 - y1
+                min_size = 30  # Минимальный размер рамки в пикселях
+
+                if box_width > min_size and box_height > min_size:
                     # Преобразуем координаты в целые числа и добавляем в список
                     boxes.append([int(x1), int(y1), int(x2), int(y2)])
 
@@ -269,17 +279,6 @@ class PeopleCounter:
 
             # Рисуем линию
             cv2.line(display_frame, line_start, line_end, (255, 0, 0), 2)
-
-            # Добавляем текст-подсказку
-            cv2.putText(
-                display_frame,
-                "Установите положение и угол линии, затем нажмите 'Начать подсчет'",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2,
-            )
 
             # Конвертируем кадр для отображения в tkinter
             img = Image.fromarray(display_frame)
@@ -336,22 +335,10 @@ class PeopleCounter:
         return False, None
 
     def update_frame(self):
-        """Основной метод обработки кадров и подсчета пересечений
-
-        Этот метод выполняется циклически и:
-        1. Получает новый кадр с камеры
-        2. Обнаруживает людей на кадре
-        3. Отслеживает их перемещения
-        4. Проверяет пересечение линии
-        5. Обновляет счетчик
-        6. Отображает результаты
-        """
-        # Проверяем, что мы не в режиме настройки
+        """Основной метод обработки кадров и подсчета пересечений"""
         if not self.setup_mode:
-            # Получаем новый кадр с камеры
             ret, frame, display_frame = self.get_optimized_frame()
-            if ret:  # Если кадр успешно получен
-                # Вычисляем текущие координаты линии подсчета
+            if ret:
                 line_start, line_end = self.get_line_points(
                     frame.shape[1], frame.shape[0]
                 )
@@ -363,61 +350,81 @@ class PeopleCounter:
                 people = self.detect_people(frame)
 
                 # Словарь для хранения текущих позиций людей
-                # Ключ - ID человека, значение - его координаты
                 current_tracks = {}
 
-                # Обрабатываем каждого обнаруженного человека
+                # Сопоставляем текущие детекции с предыдущими позициями
+                used_prev_positions = set()
+                used_current_detections = set()
+
+                # Для каждой текущей детекции ищем ближайшую предыдущую позицию
                 for i, box in enumerate(people):
-                    # Получаем координаты рамки
                     x1, y1, x2, y2 = box
-
-                    # Рисуем зеленую рамку вокруг человека
-                    cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-                    # Вычисляем позицию ног (центр нижней части рамки)
-                    # Используем нижнюю точку, так как она более стабильна для отслеживания
                     foot_position = (int((x1 + x2) / 2), y2)
 
-                    # Рисуем красную точку в позиции ног для отладки
-                    cv2.circle(display_frame, foot_position, 5, (0, 0, 255), -1)
+                    # Ищем ближайшую предыдущую позицию
+                    min_dist = float('inf')
+                    best_prev_id = None
 
-                    # Если у этого человека есть предыдущая позиция
-                    if i in self.previous_positions:
-                        # Проверяем, пересек ли человек линию
+                    for prev_id, prev_pos in self.previous_positions.items():
+                        if prev_id in used_prev_positions:
+                            continue
+
+                        # Вычисляем расстояние между текущей и предыдущей позицией
+                        dist = math.sqrt(
+                            (foot_position[0] - prev_pos[0])**2 +
+                            (foot_position[1] - prev_pos[1])**2
+                        )
+
+                        # Если расстояние меньше порога и меньше предыдущего минимума
+                        if dist < 100 and dist < min_dist:  # 100 пикселей - максимальное допустимое перемещение
+                            min_dist = dist
+                            best_prev_id = prev_id
+
+                    # Если нашли соответствие
+                    if best_prev_id is not None:
+                        used_prev_positions.add(best_prev_id)
+                        used_current_detections.add(i)
+                        
+                        # Проверяем пересечение линии
                         crossed, direction = self.check_line_crossing(
                             foot_position,
-                            self.previous_positions[i],
+                            self.previous_positions[best_prev_id],
                             line_start,
                             line_end,
                         )
 
-                        # Если произошло пересечение линии
                         if crossed:
                             if direction == "in":
-                                # Увеличиваем счетчик людей внутри
                                 self.people_inside += 1
                             else:
-                                # Уменьшаем счетчик, но не меньше 0
                                 self.people_inside = max(0, self.people_inside - 1)
 
-                            # Обновляем текст счетчика на экране
-                            self.count_label.config(
-                                text=f"Людей в помещении: {self.people_inside}"
-                            )
+                        # Обновляем позицию для этого ID
+                        current_tracks[best_prev_id] = foot_position
+                    else:
+                        # Новая детекция - присваиваем новый ID
+                        new_id = max(self.previous_positions.keys(), default=-1) + 1
+                        current_tracks[new_id] = foot_position
 
-                    # Сохраняем текущую позицию для следующего кадра
-                    current_tracks[i] = foot_position
+                    # Рисуем рамку и точку
+                    cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.circle(display_frame, foot_position, 5, (0, 0, 255), -1)
+
+                # Обновляем счетчик на экране
+                self.count_label.config(
+                    text=f"Людей в помещении: {self.people_inside}"
+                )
 
                 # Обновляем словарь позиций
                 self.previous_positions = current_tracks
 
-                # Конвертируем кадр из BGR в формат для отображения в Tkinter
+                # Конвертируем кадр для отображения в Tkinter
                 img = Image.fromarray(display_frame)
                 imgtk = ImageTk.PhotoImage(image=img)
                 self.video_label.imgtk = imgtk
                 self.video_label.configure(image=imgtk)
 
-            # Планируем следующее обновление через 30 миллисекунд
+            # Планируем следующее обновление
             self.root.after(30, self.update_frame)
 
     def start_counting(self):

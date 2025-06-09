@@ -120,15 +120,6 @@ class CounterThread(threading.Thread):
 
         if is_setup_mode:
             cv2.line(display_frame, line_start, line_end, (255, 0, 0), 2)
-            cv2.putText(
-                display_frame,
-                "Настройте положение и угол линии",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2,
-            )
         else:
             # Обработка режима подсчета
             people = counter_instance.detect_people(frame)

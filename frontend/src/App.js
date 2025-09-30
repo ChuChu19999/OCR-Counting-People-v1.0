@@ -117,6 +117,7 @@ function App() {
   const [linePosition, setLinePosition] = useState(50);
   const [lineAngle, setLineAngle] = useState(0);
   const [countUpdateInterval, setCountUpdateInterval] = useState(null);
+  const [streamVersion, setStreamVersion] = useState(0);
 
   const updateCount = useCallback(async () => {
     try {
@@ -154,6 +155,17 @@ function App() {
   const handleStart = async () => {
     try {
       await api.startSystem();
+      setStreamVersion((v) => v + 1);
+      // Сбрасываем локальные состояния к дефолту
+      setPeopleCount(0);
+      setLinePosition(50);
+      setLineAngle(0);
+      // Синхронизируем дефолтные настройки линии с бэкендом
+      try {
+        await api.updateLineSettings(50, 0);
+      } catch (e) {
+        console.error("Не удалось применить дефолтные настройки линии на бэкенде:", e);
+      }
       setIsRunning(true);
     } catch (error) {
       console.error("Ошибка при запуске системы:", error);
@@ -187,6 +199,8 @@ function App() {
           clearInterval(countUpdateInterval);
           setCountUpdateInterval(null);
         }
+        // Инкрементируем версию, чтобы принудительно размонтировать/перемонтировать img
+        setStreamVersion((v) => v + 1);
       }
     } catch (error) {
       console.error("Ошибка при остановке системы:", error);
@@ -256,7 +270,8 @@ function App() {
               >
                 <VideoFeed
                   isRunning={isRunning}
-                  onError={() => console.error("Ошибка загрузки видео")}
+                  streamVersion={streamVersion}
+                  onError={handleVideoError}
                 />
               </Paper>
             </Box>

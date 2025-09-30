@@ -1,37 +1,21 @@
-# Импортируем все необходимые библиотеки для работы программы
-import cv2  # OpenCV - библиотека для работы с видео и изображениями
-import numpy as np  # NumPy - библиотека для работы с массивами и матрицами
-import tkinter as tk  # Tkinter - библиотека для создания графического интерфейса
-from tkinter import (
-    ttk,
-)  # ttk - современные виджеты
-from PIL import (
-    Image,
-    ImageTk,
-)  # PIL - для работы с изображениями и конвертации их для Tkinter
-import math  # Математические функции (sin, cos, sqrt и т.д.)
-import ultralytics  # Основная библиотека YOLOv8
-from ultralytics import (
-    YOLO,
-)  # Импортируем конкретно YOLO модель для распознавания объектов
+import cv2
+import numpy as np
+import tkinter as tk
+from tkinter import ttk
+from PIL import Image, ImageTk
+import math
+from ultralytics import YOLO
 
 
-# Класс для подсчета людей в помещении
 class PeopleCounter:
+    """Подсчет людей с веб-камеры с помощью YOLO и проверки пересечения линии."""
     def __init__(self, root):
-        # root - это главное окно приложения, которое мы получаем из Tkinter
         self.root = root
-        # Устанавливаем заголовок окна программы
         self.root.title("Система подсчета людей")
 
-        # Загружаем предобученную модель YOLOv8n для распознавания объектов
-        # 'yolov8n.pt' - это самая маленькая и быстрая версия модели
-        self.model = YOLO("yolov8n.pt")
+        self.model = None
 
-        # Открываем файл с названиями классов, которые может распознать YOLO
-        # coco.names содержит список всех объектов, которые умеет распознавать модель
         with open("coco.names", "r") as f:
-            # Читаем все классы в список, убирая лишние пробелы
             self.classes = f.read().strip().split("\n")
 
         # Счетчик людей, находящихся внутри помещения
@@ -48,11 +32,21 @@ class PeopleCounter:
         # True - можно настраивать линию, False - идет подсчет людей
         self.setup_mode = True
 
-        # Создаем все элементы интерфейса (кнопки, слайдеры и т.д.)
         self.setup_ui()
 
         # Инициализируем камеру (0 - обычно встроенная камера ноутбука)
-        self.cap = cv2.VideoCapture(0)
+        # На Windows ускоряет открытие: CAP_DSHOW
+        try:
+            self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            if not self.cap or not self.cap.isOpened():
+                self.cap = cv2.VideoCapture(0)
+        except Exception:
+            self.cap = cv2.VideoCapture(0)
+        # Уменьшаем задержки буфера и ставим пониженное разрешение
+        try:
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
         # Устанавливаем пониженное разрешение камеры для лучшей производительности
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)  # Ширина кадра
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)  # Высота кадра
@@ -130,15 +124,7 @@ class PeopleCounter:
         self.count_label.pack(padx=10)
 
     def get_line_points(self, frame_width, frame_height):
-        """Вычисляет координаты начала и конца линии подсчета с учетом соотношения сторон кадра
-
-        Args:
-            frame_width: ширина кадра
-            frame_height: высота кадра
-
-        Returns:
-            tuple: ((x1,y1), (x2,y2)) - координаты начала и конца линии
-        """
+        """Вычисляет координаты начала и конца линии подсчета с учетом соотношения сторон кадра"""
         # Центр кадра
         center_x = frame_width // 2
         center_y = frame_height // 2
@@ -200,14 +186,7 @@ class PeopleCounter:
         return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)
 
     def get_optimized_frame(self):
-        """Получает и подготавливает кадр с камеры для дальнейшей обработки
-
-        Returns:
-            tuple: (успех, исходный кадр, кадр для отображения)
-            - успех (bool): True если кадр получен успешно
-            - исходный кадр: numpy array с BGR изображением для обработки
-            - кадр для отображения: копия кадра для рисования на нем
-        """
+        """Читает кадр, делает горизонтальное зеркало и возвращает копию для рисования."""
         # Читаем кадр с камеры
         # ret - успешность получения кадра (True/False)
         # frame - сам кадр в формате numpy array
@@ -226,15 +205,11 @@ class PeopleCounter:
         return False, None, None
 
     def detect_people(self, frame):
-        """Обнаруживает людей на кадре с помощью YOLO
+        """Возвращает список `[x1, y1, x2, y2]` детекций класса person на кадре."""
+        # Ленивая загрузка модели при первом обращении в режиме подсчета
+        if self.model is None:
+            self.model = YOLO("yolov8n.pt")
 
-        Args:
-            frame: numpy array с BGR изображением
-
-        Returns:
-            list: Список координат обнаруженных людей в формате [x1, y1, x2, y2]
-                 где (x1,y1) - верхний левый угол, (x2,y2) - нижний правый угол
-        """
         # Запускаем YOLO для обнаружения только класса 'person' (индекс 0)
         # Уменьшаем порог NMS для лучшего разделения близко стоящих людей
         # Увеличиваем conf для уменьшения ложных срабатываний
@@ -269,7 +244,7 @@ class PeopleCounter:
         return boxes
 
     def setup_preview(self):
-        """Предварительный просмотр для настройки линии"""
+        """Предпросмотр с линией для режима настройки."""
         ret, _, display_frame = self.get_optimized_frame()
         if ret:
             # Получаем точки линии
@@ -290,19 +265,7 @@ class PeopleCounter:
             self.root.after(30, self.setup_preview)
 
     def check_line_crossing(self, current_pos, previous_pos, line_start, line_end):
-        """Проверяет, пересек ли человек линию подсчета
-
-        Args:
-            current_pos: текущие координаты человека (x, y)
-            previous_pos: предыдущие координаты человека (x, y)
-            line_start: начальная точка линии (x, y)
-            line_end: конечная точка линии (x, y)
-
-        Returns:
-            tuple: (произошло_пересечение, направление)
-            - произошло_пересечение (bool): True если линия была пересечена
-            - направление (str): "in" если человек вошел, "out" если вышел
-        """
+        """Проверяет факт пересечения линии и определяет направление (in/out)."""
         # Если нет предыдущей позиции, пересечения быть не может
         if previous_pos is None:
             return False, None
@@ -335,7 +298,7 @@ class PeopleCounter:
         return False, None
 
     def update_frame(self):
-        """Основной метод обработки кадров и подсчета пересечений"""
+        """Детектирует, сопоставляет с предыдущими позициями и обновляет счетчик/кадр."""
         if not self.setup_mode:
             ret, frame, display_frame = self.get_optimized_frame()
             if ret:
@@ -457,12 +420,7 @@ class PeopleCounter:
             self.cap.release()
 
     def process_video(self, input_path, output_path):
-        """Обрабатывает видео из файла (пока не реализовано полностью)
-
-        Args:
-            input_path: путь к входному видеофайлу
-            output_path: путь для сохранения обработанного видео
-        """
+        """Обрабатывает видео из файла (пока не реализовано полностью)"""
         # Открываем видеофайл для чтения
         cap = cv2.VideoCapture(input_path)
 
@@ -494,19 +452,10 @@ class PeopleCounter:
 
 
 def main():
-    """Точка входа в программу
-
-    Создает главное окно приложения и запускает его
-    """
-    # Создаем главное окно Tkinter
     root = tk.Tk()
-    # Создаем экземпляр нашего приложения
     app = PeopleCounter(root)
-    # Запускаем главный цикл обработки событий
     root.mainloop()
 
 
-# Проверяем, что скрипт запущен напрямую (не импортирован)
 if __name__ == "__main__":
-    # Запускаем приложение
     main()

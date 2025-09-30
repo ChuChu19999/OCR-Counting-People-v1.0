@@ -9,19 +9,14 @@ import threading
 import queue
 import sys
 import os
-
-
-# Абсолютный путь к корневой директории проекта
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Добавляем путь к корневой директории проекта
-sys.path.append(BASE_DIR)
-
-# Импортируем PeopleCounter из корневой директории
-from people_counter import PeopleCounter
 import tkinter as tk
 
-# Глобальные переменные для хранения состояния
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(BASE_DIR)
+
+from people_counter import PeopleCounter
+
 frame_queue = queue.Queue(maxsize=10)
 command_queue = queue.Queue()
 people_count = 0
@@ -33,7 +28,7 @@ stopping_in_progress = False
 
 
 def create_tk_root():
-    """Создает новый экземпляр Tk в главном потоке"""
+    """Создает или возвращает скрытый Tk `root` для совместимости с Tk-интерфейсом."""
     global root
     if root is None:
         root = tk.Tk()
@@ -42,6 +37,8 @@ def create_tk_root():
 
 
 class CounterThread(threading.Thread):
+    """Фоновый поток камерного цикла, детекции и отрисовки кадра."""
+
     def __init__(self):
         super().__init__()
         self.running = True
@@ -49,10 +46,13 @@ class CounterThread(threading.Thread):
         self.daemon = True
 
     def run(self):
+        """Основной цикл: сначала режим настройки, затем режим подсчета."""
         global root, counter_instance, setup_mode
         try:
-            # Модифицируем класс PeopleCounter для использования абсолютных путей
+
             class ModifiedPeopleCounter(PeopleCounter):
+                """Обертка над `PeopleCounter` c фиксацией рабочей директории и без preview."""
+
                 def __init__(self, root):
                     current_dir = os.getcwd()
                     os.chdir(BASE_DIR)
@@ -60,11 +60,25 @@ class CounterThread(threading.Thread):
                     os.chdir(current_dir)
 
                 def setup_preview(self):
-                    """Переопределяем метод для пропуска создания preview"""
-                    pass  # Пропускаем создание preview, так как оно нам не нужно
+                    """Отключает внутренний preview (используется собственная выдача кадров)."""
+                    pass
 
             # Создаем экземпляр счетчика
             counter_instance = ModifiedPeopleCounter(create_tk_root())
+            # Сбрасываем внутренние состояния счетчика к дефолту
+            try:
+                counter_instance.people_inside = 0
+                counter_instance.previous_positions = {}
+                if hasattr(counter_instance, "line_position") and hasattr(
+                    counter_instance.line_position, "set"
+                ):
+                    counter_instance.line_position.set(50)
+                if hasattr(counter_instance, "line_angle") and hasattr(
+                    counter_instance.line_angle, "set"
+                ):
+                    counter_instance.line_angle.set(0)
+            except Exception:
+                pass
 
             # Запускаем в режиме настройки
             while self.running and setup_mode:
@@ -91,7 +105,7 @@ class CounterThread(threading.Thread):
             self.cleanup()
 
     def _process_commands(self):
-        """Обработка команд из очереди"""
+        """Считывает и применяет команды управления линией из очереди."""
         try:
             while True:
                 cmd, value = command_queue.get_nowait()
@@ -104,7 +118,7 @@ class CounterThread(threading.Thread):
             pass
 
     def _process_frame(self, is_setup_mode):
-        """Обработка кадра"""
+        """Готовит отображаемый кадр и, при необходимости, выполняет детекцию людей."""
         global people_count
 
         if not counter_instance:
@@ -164,7 +178,7 @@ class CounterThread(threading.Thread):
             frame_queue.put(buffer.tobytes())
 
     def cleanup(self):
-        """Очистка ресурсов"""
+        """Освобождает ресурсы (очереди, OpenCV, Tk) и сбрасывает состояние."""
         global counter_instance, root
 
         print("Начинаем очистку ресурсов...")
@@ -177,7 +191,7 @@ class CounterThread(threading.Thread):
         if counter_instance:
             try:
                 counter_instance.cap.release()
-            except:
+            except Exception:
                 pass
             counter_instance = None
 
@@ -186,13 +200,14 @@ class CounterThread(threading.Thread):
             try:
                 root.quit()
                 root.destroy()
-            except:
+            except Exception:
                 pass
             root = None
 
         print("Очистка ресурсов завершена")
 
     def stop(self):
+        """Останавливает поток и запускает очистку."""
         if not self.stopped:
             print("Останавливаем поток...")
             self.running = False
@@ -200,6 +215,7 @@ class CounterThread(threading.Thread):
             self.cleanup()
 
     def _clear_queue(self, q):
+        """Полностью освобождает указанную очередь без блокировок."""
         try:
             while True:
                 q.get_nowait()
@@ -212,20 +228,23 @@ counter_thread = None
 
 
 class StartCounterView(APIView):
+    """Стартует поток и включает режим настройки."""
+
     def post(self, request):
-        global counter_thread, setup_mode
+        global counter_thread, setup_mode, people_count, counter_instance
         if counter_thread is None or not counter_thread.is_alive():
-            setup_mode = True  # Начинаем с режима настройки
+            setup_mode = True
+            people_count = 0
             counter_thread = CounterThread()
             counter_thread.start()
         return Response({"status": "started"})
 
 
 class StopCounterView(APIView):
+    """Останавливает поток и безопасно освобождает ресурсы."""
+
     def post(self, request):
         global counter_thread, counter_instance, root, stopping_in_progress
-
-        # Используем блокировку для защиты от множественных запросов
         with stop_lock:
             if stopping_in_progress:
                 return Response({"status": "stop_in_progress"}, status=429)
@@ -240,8 +259,6 @@ class StopCounterView(APIView):
                 if not counter_thread.stopped:
                     print("Останавливаем поток...")
                     counter_thread.stop()
-
-                    # Ждем завершения потока
                     print("Ожидаем завершения потока...")
                     counter_thread.join(timeout=3.0)
 
@@ -249,11 +266,10 @@ class StopCounterView(APIView):
                         print(
                             "Поток не завершился корректно, принудительно завершаем..."
                         )
-                        # Если поток все еще жив, принудительно очищаем ресурсы
                         if counter_instance:
                             try:
                                 counter_instance.cap.release()
-                            except:
+                            except Exception:
                                 pass
                             counter_instance = None
 
@@ -261,7 +277,7 @@ class StopCounterView(APIView):
                             try:
                                 root.quit()
                                 root.destroy()
-                            except:
+                            except Exception:
                                 pass
                             root = None
 
@@ -279,7 +295,7 @@ class StopCounterView(APIView):
                     if root:
                         root.quit()
                         root.destroy()
-                except:
+                except Exception:
                     pass
 
                 counter_thread = None
@@ -294,18 +310,21 @@ class StopCounterView(APIView):
 
 
 class UpdateLineSettingsView(APIView):
+    """Обновляет положение и угол линии через очередь команд."""
+
     def post(self, request):
         global counter_instance
         if counter_instance:
             position = request.data.get("position", 50)
             angle = request.data.get("angle", 0)
-            # Добавляем команды в очередь вместо прямого вызова
             command_queue.put(("position", position))
             command_queue.put(("angle", angle))
         return Response({"status": "updated"})
 
 
 class StartCountingView(APIView):
+    """Переключает систему из режима настройки в режим подсчета."""
+
     def post(self, request):
         global setup_mode
         setup_mode = False
@@ -313,6 +332,8 @@ class StartCountingView(APIView):
 
 
 def video_feed(request):
+    """Возвращает MJPEG-поток кадров для фронтенда."""
+
     def generate():
         global counter_thread
         while True:
@@ -340,11 +361,18 @@ def video_feed(request):
                 print(f"Ошибка в видеопотоке: {str(e)}")
                 break
 
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         generate(), content_type="multipart/x-mixed-replace; boundary=frame", status=200
     )
+    # Запрещаем кэширование, чтобы браузер не показывал старые кадры
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 class GetCountView(APIView):
+    """Возвращает текущее значение счетчика людей."""
+
     def get(self, request):
         return Response({"count": people_count})
